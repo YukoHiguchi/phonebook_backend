@@ -2,9 +2,18 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const mongoose = require("mongoose");
 const app = express();
 const Person = require("./models/phone");
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.message);
+
+  if (error.name === "CastError") {
+    return response.status(400).send({ error: "malformatted id" });
+  }
+
+  next(error);
+};
 
 const unknownEndpoint = (req, response) => {
   response.status(404).send({ error: "unknown endpoint" });
@@ -63,13 +72,33 @@ app.post("/api/persons", (req, response) => {
   });
 });
 
-app.get("/api/persons/:id", (req, response) => {
-  Person.findById(req.params.id).then((person) => {
-    response.json(person);
-  });
+app.get("/api/persons/:id", (req, response, next) => {
+  Person.findById(req.params.id)
+    .then((person) => {
+      if (person) {
+        response.json(person);
+      } else {
+        response.status(404).end();
+      }
+    })
+    .catch((error) => next(error));
 });
 
-app.delete("/api/persons/:id", (req, response) => {
+app.put("/api/persons/:id", (req, response, next) => {
+  const body = req.body;
+
+  const person = {
+    name: body.name,
+    number: body.number,
+  };
+  Person.findByIdAndUpdate(req.params.id, person, { new: true })
+    .then((updatedPerson) => {
+      response.json(updatedPerson);
+    })
+    .catch((error) => next(error));
+});
+
+app.delete("/api/persons/:id", (req, response, next) => {
   Person.findByIdAndDelete(req.params.id)
     .then(() => {
       response.status(204).end();
@@ -78,6 +107,7 @@ app.delete("/api/persons/:id", (req, response) => {
 });
 
 app.use(unknownEndpoint);
+app.use(errorHandler);
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {
